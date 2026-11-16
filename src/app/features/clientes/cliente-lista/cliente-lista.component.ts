@@ -1,20 +1,30 @@
 import { Component, inject, signal, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
+import { HttpErrorResponse } from '@angular/common/http';
 import { Cliente } from '../modelos/cliente.model';
+import { extraerMensajeError } from '../../../shared/utils/http-error.util';
+import { enmascararNombre } from '../../../shared/utils/privacidad.util';
+import { ConsultaIdentidadService } from '../../../core/services/consulta-identidad.service';
 import { BuscadorComponent } from '../../../shared/components/buscador/buscador.component';
+import { VentanaErrorComponent } from '../../../shared/components/ventana-error/ventana-error.component';
 import { ClienteService } from '../servicios/cliente.service';
 import { AuthService } from '@core/services/auth.service';
 
 @Component({
   selector: 'app-cliente-list',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, BuscadorComponent],
+  imports: [CommonModule, ReactiveFormsModule, BuscadorComponent, VentanaErrorComponent],
   templateUrl: './cliente-lista.component.html',
   styleUrl: './cliente-lista.component.css'
 })
 export class ClienteListaComponent implements OnInit {
   private fb = inject(FormBuilder);
+  private consulta = inject(ConsultaIdentidadService);
+  avisoDocumento = signal('');
+  errorDocumento = signal('');
+  private ultimaConsulta = '';
+  private documentoIncorrecto = false;
   private clienteService = inject(ClienteService);
 
 
@@ -76,7 +86,46 @@ export class ClienteListaComponent implements OnInit {
       }
       
       numDocControl?.updateValueAndValidity();
+      this.ultimaConsulta = '';
+      this.avisoDocumento.set('');
     });
+  }
+
+  buscarDocumento(): void {
+    const tipo = this.clienteForm.get('tipo_doc')?.value;
+    const numero = String(this.clienteForm.get('num_doc')?.value ?? '').replace(/\D/g, '');
+    const largo = tipo === 'RUC' ? 11 : 8;
+    if (numero.length !== largo || numero === this.ultimaConsulta) return;
+    this.ultimaConsulta = numero;
+    this.avisoDocumento.set('Buscando datos...');
+    const alRecibir = (nombre: string, direccion?: string) => {
+      if (!nombre) {
+        this.avisoDocumento.set('No se encontró. Escriba el nombre.');
+        return;
+      }
+      this.clienteForm.patchValue({
+        nombres: nombre,
+        direccion: direccion || this.clienteForm.get('direccion')?.value
+      });
+      this.documentoIncorrecto = false;
+      this.avisoDocumento.set('Datos encontrados. Revise el nombre antes de guardar.');
+    };
+    const alFallar = (err: HttpErrorResponse) => {
+      this.avisoDocumento.set('');
+      this.documentoIncorrecto = true;
+      this.clienteForm.patchValue({ nombres: '' });
+      const tipoDoc = tipo === 'RUC' ? 'RUC' : 'DNI';
+      this.errorDocumento.set(extraerMensajeError(err, `El ${tipoDoc} es incorrecto.`));
+    };
+    if (tipo === 'RUC') {
+      this.consulta.ruc(numero).subscribe({ next: datos => alRecibir(datos.razonSocial, datos.direccion), error: alFallar });
+    } else {
+      this.consulta.dni(numero).subscribe({ next: datos => alRecibir(datos.nombreCompleto), error: alFallar });
+    }
+  }
+
+  nombreVisible(cliente: { tipo_doc: string; nombres: string }): string {
+    return cliente.tipo_doc === 'DNI' ? enmascararNombre(cliente.nombres) : cliente.nombres;
   }
 
   filtrarClientes(termino: string): void {
@@ -144,6 +193,11 @@ export class ClienteListaComponent implements OnInit {
   }
 
   guardarCliente(): void {
+    if (this.documentoIncorrecto) {
+      const tipo = this.clienteForm.get('tipo_doc')?.value === 'RUC' ? 'RUC' : 'DNI';
+      this.errorDocumento.set(`El ${tipo} es incorrecto.`);
+      return;
+    }
     if (this.clienteForm.invalid) {
       this.clienteForm.markAllAsTouched();
       return;

@@ -53,6 +53,10 @@
                 <input type="text" class="form-control" id="nombresInput" formControlName="nombresCompleto"
                   placeholder="Nombres Completos" />
                 <label for="nombresInput">Nombres y Apellidos Completos</label>
+                @if (avisoDocumento()) {
+                <div class="form-text">{{ avisoDocumento() }}</div>
+                }
+<app-ventana-error [mensaje]="errorDocumento()" (cerrar)="errorDocumento.set('')" />
               </div>
             </div>
 
@@ -244,7 +248,7 @@
           <tr class="border-bottom">
             <td class="fw-bold text-secondary text-center py-1.5">{{ user.idUsuario }}</td>
             <td class="text-nowrap fw-bold text-dark font-monospace py-1.5">{{ user.cuenta }}</td>
-            <td class="text-nowrap py-1.5">{{ user.nombresCompleto }}</td>
+            <td class="text-nowrap py-1.5">{{ nombreVisible(user.nombresCompleto) }}</td>
             <td class="py-1.5">{{ user.email || 'Sin registro' }}</td>
             <td class="py-1.5">{{ user.telefono || '-' }}</td>
             <td class="py-1.5">

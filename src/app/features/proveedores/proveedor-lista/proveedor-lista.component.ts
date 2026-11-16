@@ -3,7 +3,10 @@ import { CommonModule } from '@angular/common';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { HttpErrorResponse } from '@angular/common/http';
 import { BuscadorComponent } from '../../../shared/components/buscador/buscador.component';
+import { VentanaErrorComponent } from '../../../shared/components/ventana-error/ventana-error.component';
 import { extraerMensajeError } from '../../../shared/utils/http-error.util';
+import { enmascararNombre } from '../../../shared/utils/privacidad.util';
+import { ConsultaIdentidadService } from '../../../core/services/consulta-identidad.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { Proveedor, TipoDocProveedor } from '../modelos/proveedor.model';
 import { ProveedorService } from '../servicios/proveedor.service';
@@ -19,13 +22,18 @@ const PATRONES_DOC: Record<TipoDocProveedor, { patron: RegExp; maxLength: number
 @Component({
   selector: 'app-proveedor-lista',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, BuscadorComponent],
+  imports: [CommonModule, ReactiveFormsModule, BuscadorComponent, VentanaErrorComponent],
   templateUrl: './proveedor-lista.component.html',
   styleUrl: './proveedor-lista.component.css'
 })
 export class ProveedorListaComponent implements OnInit {
   private fb = inject(FormBuilder);
   private proveedorService = inject(ProveedorService);
+  private consulta = inject(ConsultaIdentidadService);
+  avisoDocumento = signal('');
+  errorDocumento = signal('');
+  private ultimaConsulta = '';
+  private documentoIncorrecto = false;
   private authService = inject(AuthService);
 
   proveedores = signal<Proveedor[]>([]);
@@ -86,7 +94,56 @@ export class ProveedorListaComponent implements OnInit {
       const regla = PATRONES_DOC[tipo] ?? PATRONES_DOC.RUC;
       control?.setValidators([Validators.required, Validators.pattern(regla.patron)]);
       control?.updateValueAndValidity();
+      this.ultimaConsulta = '';
+      this.avisoDocumento.set('');
     });
+  }
+
+  buscarDocumento(): void {
+    const tipo = this.proveedorForm.get('tipo_doc')?.value;
+    const numero = String(this.proveedorForm.get('num_doc')?.value ?? '').replace(/\D/g, '');
+    if (tipo !== 'RUC' && tipo !== 'DNI') return;
+    const largo = tipo === 'RUC' ? 11 : 8;
+    if (numero.length !== largo || numero === this.ultimaConsulta) return;
+    this.ultimaConsulta = numero;
+    this.avisoDocumento.set('Buscando datos...');
+    const alFallar = (err: HttpErrorResponse) => {
+      this.avisoDocumento.set('');
+      this.documentoIncorrecto = true;
+      this.proveedorForm.patchValue({ razon_social: '' });
+      this.errorDocumento.set(extraerMensajeError(err, `El ${tipo} es incorrecto.`));
+    };
+    if (tipo === 'RUC') {
+      this.consulta.ruc(numero).subscribe({
+        next: datos => {
+          if (!datos.razonSocial) {
+            this.avisoDocumento.set('No se encontró. Escriba el nombre.');
+            return;
+          }
+          this.proveedorForm.patchValue({ razon_social: datos.razonSocial, direccion: datos.direccion || this.proveedorForm.get('direccion')?.value });
+          this.documentoIncorrecto = false;
+          this.avisoDocumento.set('Datos encontrados. Revise el nombre antes de guardar.');
+        },
+        error: alFallar
+      });
+    } else {
+      this.consulta.dni(numero).subscribe({
+        next: datos => {
+          if (!datos.nombreCompleto) {
+            this.avisoDocumento.set('No se encontró. Escriba el nombre.');
+            return;
+          }
+          this.proveedorForm.patchValue({ razon_social: datos.nombreCompleto });
+          this.documentoIncorrecto = false;
+          this.avisoDocumento.set('Datos encontrados. Revise el nombre antes de guardar.');
+        },
+        error: alFallar
+      });
+    }
+  }
+
+  nombreVisible(proveedor: Proveedor): string {
+    return proveedor.tipo_doc === 'DNI' ? enmascararNombre(proveedor.razon_social) : proveedor.razon_social;
   }
 
   /** Datos de ayuda para el input del documento (maxlength y texto del label) */
@@ -149,6 +206,11 @@ export class ProveedorListaComponent implements OnInit {
   }
 
   guardarProveedor(): void {
+    if (this.documentoIncorrecto) {
+      const tipo = this.proveedorForm.get('tipo_doc')?.value === 'DNI' ? 'DNI' : 'RUC';
+      this.errorDocumento.set(`El ${tipo} es incorrecto.`);
+      return;
+    }
     if (this.proveedorForm.invalid) {
       this.proveedorForm.markAllAsTouched();
       return;

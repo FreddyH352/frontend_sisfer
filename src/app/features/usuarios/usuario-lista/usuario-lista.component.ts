@@ -3,8 +3,13 @@ import { CommonModule } from '@angular/common';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { UsuarioService } from '../servicios/usuario.service';
 import { BuscadorComponent } from '../../../shared/components/buscador/buscador.component';
+import { VentanaErrorComponent } from '../../../shared/components/ventana-error/ventana-error.component';
 import { UsuarioResponseDTO } from '../modelos/usuario.model';
+import { HttpErrorResponse } from '@angular/common/http';
 import { NotificationService } from '../../../core/services/notification.service';
+import { ConsultaIdentidadService } from '../../../core/services/consulta-identidad.service';
+import { extraerMensajeError } from '../../../shared/utils/http-error.util';
+import { enmascararNombre } from '../../../shared/utils/privacidad.util';
 import { RolService } from '../servicios/rol.service';
 
 declare var bootstrap: any;
@@ -12,12 +17,17 @@ declare var bootstrap: any;
 @Component({
   selector: 'app-usuario-lista',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, BuscadorComponent],
+  imports: [CommonModule, ReactiveFormsModule, BuscadorComponent, VentanaErrorComponent],
   templateUrl: './usuario-lista.component.html',
   styleUrls: ['./usuario-lista.component.css']
 })
 export class UsuarioListaComponent implements OnInit {
   private usuarioService = inject(UsuarioService);
+  private consulta = inject(ConsultaIdentidadService);
+  avisoDocumento = signal('');
+  errorDocumento = signal('');
+  private ultimaConsulta = '';
+  private documentoIncorrecto = false;
   notificationService = inject(NotificationService);
   private fb = inject(FormBuilder);
   private rolService = inject(RolService);
@@ -62,6 +72,33 @@ export class UsuarioListaComponent implements OnInit {
     const input = event.target as HTMLInputElement;
     const limpio = input.value.replace(/[^0-9]/g, '').slice(0, 8);
     this.usuarioForm.get('dni')?.setValue(limpio, { emitEvent: false });
+    if (limpio.length !== 8 || limpio === this.ultimaConsulta) return;
+    this.ultimaConsulta = limpio;
+    this.avisoDocumento.set('Buscando datos...');
+    this.consulta.dni(limpio).subscribe({
+      next: datos => {
+        if (!datos.nombreCompleto) {
+          this.avisoDocumento.set('');
+          this.documentoIncorrecto = true;
+          this.usuarioForm.patchValue({ nombresCompleto: '' });
+          this.errorDocumento.set('El DNI es incorrecto.');
+          return;
+        }
+        this.documentoIncorrecto = false;
+        this.usuarioForm.patchValue({ nombresCompleto: datos.nombreCompleto });
+        this.avisoDocumento.set('Datos encontrados. Revise el nombre antes de guardar.');
+      },
+      error: (err: HttpErrorResponse) => {
+        this.avisoDocumento.set('');
+        this.documentoIncorrecto = true;
+        this.usuarioForm.patchValue({ nombresCompleto: '' });
+        this.errorDocumento.set(extraerMensajeError(err, 'El DNI es incorrecto.'));
+      }
+    });
+  }
+
+  nombreVisible(nombre: string): string {
+    return enmascararNombre(nombre);
   }
 
   soloNumerosTelefono(event: Event): void {
@@ -164,6 +201,10 @@ export class UsuarioListaComponent implements OnInit {
   }
 
   guardarUsuario(): void {
+    if (this.documentoIncorrecto) {
+      this.errorDocumento.set('El DNI es incorrecto.');
+      return;
+    }
     const email = this.usuarioForm.value.email || '';
     const telefono = this.usuarioForm.value.telefono || '';
     const dni = this.usuarioForm.value.dni || '';

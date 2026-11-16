@@ -171,7 +171,7 @@
             <td class="ps-3 fw-semibold">{{ v.numero }}</td>
             <td class="text-secondary">{{ v.fecVenta | date:'dd/MM/yyyy HH:mm' }}</td>
             <td class="text-truncate" [title]="v.cliente">
-              {{ v.cliente }}
+              {{ v.docCliente.startsWith('DNI') ? nombreProtegido(v.cliente) : v.cliente }}
               <div class="small text-secondary">{{ v.docCliente }}</div>
             </td>
             <td class="font-monospace small">{{ v.comprobante || '-' }}</td>

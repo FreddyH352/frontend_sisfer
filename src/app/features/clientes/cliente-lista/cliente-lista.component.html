@@ -42,7 +42,7 @@
               <span class="badge bg-secondary-subtle text-secondary me-1 py-1 px-1.5 fw-normal">{{ cliente.tipo_doc }}</span>
               <span>{{ cliente.num_doc }}</span>
             </td>
-            <td class="text-dark fw-semibold py-1.5">{{ cliente.nombres }}</td>
+            <td class="text-dark fw-semibold py-1.5">{{ nombreVisible(cliente) }}</td>
             <td class="text-secondary small text-truncate py-1.5" style="max-width: 200px;">{{ cliente.direccion || '-' }}</td>
             <td class="text-dark py-1.5">{{ cliente.telefono || '-' }}</td>
             <td class="text-secondary py-1.5">{{ cliente.email || '-' }}</td>
@@ -132,7 +132,7 @@
               </div>
 
               <div class="form-floating mb-3">
-                <input type="text" class="form-control" id="num_doc" formControlName="num_doc"
+                <input type="text" class="form-control" id="num_doc" formControlName="num_doc" (input)="buscarDocumento()"
                   placeholder="Número de Documento"
                   [attr.maxlength]="clienteForm.get('tipo_doc')?.value === 'RUC' ? 11 : 8"
                   [ngClass]="{ 'is-invalid': clienteForm.get('num_doc')?.touched && clienteForm.get('num_doc')?.invalid }" />
@@ -152,6 +152,10 @@
                   placeholder="Nombres o Razón Social"
                   [ngClass]="{ 'is-invalid': clienteForm.get('nombres')?.touched && clienteForm.get('nombres')?.invalid }" />
                 <label for="nombres">Nombres / Razón Social *</label>
+                @if (avisoDocumento()) {
+                <div class="form-text">{{ avisoDocumento() }}</div>
+                }
+<app-ventana-error [mensaje]="errorDocumento()" (cerrar)="errorDocumento.set('')" />
                 <div class="invalid-feedback" *ngIf="clienteForm.get('nombres')?.touched && clienteForm.get('nombres')?.invalid">
                   <span *ngIf="clienteForm.get('nombres')?.errors?.['required']">El nombre o razón social es obligatorio.</span>
                   <span *ngIf="clienteForm.get('nombres')?.errors?.['maxlength']">Máximo 150 caracteres.</span>

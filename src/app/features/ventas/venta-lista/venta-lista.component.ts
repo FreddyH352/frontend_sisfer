@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { HttpErrorResponse } from '@angular/common/http';
 import { BuscadorComponent } from '../../../shared/components/buscador/buscador.component';
 import { extraerMensajeError } from '../../../shared/utils/http-error.util';
+import { enmascararNombre } from '../../../shared/utils/privacidad.util';
 import { NotificationService } from '../../../core/services/notification.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { ClienteService } from '../../clientes/servicios/cliente.service';
@@ -27,6 +28,10 @@ type VistaVentana = 'form' | 'detalle' | null;
   styleUrls: ['./venta-lista.component.css']
 })
 export class VentaListaComponent implements OnInit, AfterViewInit, OnDestroy {
+  nombreProtegido(nombre: string): string {
+    return enmascararNombre(nombre);
+  }
+
   private readonly ventaService = inject(VentaService);
   private readonly clienteService = inject(ClienteService);
   private readonly productoService = inject(ProductoService);
